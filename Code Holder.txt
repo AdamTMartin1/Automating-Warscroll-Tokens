@@ -1,0 +1,379 @@
+import re
+import requests
+import pandas as pd
+from bs4 import BeautifulSoup
+
+
+
+def get_abilities_from_each_warscroll(faction_links: str, faction_names: str, parsed_faction_names: str) -> pd.DataFrame:
+    """
+    Scrape abilities from all warscrolls for a given faction.
+
+    Parameters:
+        faction_links (list): List of faction page links.
+        faction_names (list): List of faction names.
+        parsed_faction_names (list): List of parsed faction names to clean text.
+
+    Returns:
+        pd.DataFrame: DataFrame with columns ["Warscroll", "Timing", "Name", "Description"].
+    """
+    Unit_Abilities_df = pd.DataFrame(columns=["Warscroll", "Timing", "Name", "Description", "Keywords"])
+
+    # Get warscroll links for the army
+    unique_warscrolls = get_warscrolls_for_an_army(faction_links, faction_names)
+
+    for x_unique_warscrolls in unique_warscrolls:
+        url = "https://wahapedia.ru" + x_unique_warscrolls
+        Warscroll_Name = x_unique_warscrolls.split("/")[-1]
+        print(f"Processing warscroll: {Warscroll_Name}")
+
+        response = requests.get(url)
+        soup = BeautifulSoup(response.content, "html.parser")
+        ws_body = soup.find("div", class_="wsBody")
+
+        results = []
+        if ws_body:
+            # Look at all child <div> inside wsBody
+            for div in ws_body.find_all("div"):
+                if div.find("b"):  # only keep divs that contain <b>
+                    text = div.get_text(separator="$", strip=True)
+                    results.append(text)
+
+        abilities = []
+        Acceptable_Starts = ["Your", "Passive", "Deployment", "Reaction:", "Once", "Start", "Any"]
+
+        if results:
+            results = list(set(results))  # deduplicate
+            for r in results:
+                if any(r.startswith(start) for start in Acceptable_Starts) and ":" in r:
+                    abilities.append(r)
+
+        for x in abilities:
+            # Split ability into parts
+            line = re.sub(r'(?<!Reaction):.*?\.', '', x, count=1)
+            parts = [p for p in line.split("$") if p]
+
+            
+
+
+            if len(parts) < 2:
+                continue  # skip malformed lines
+
+            # Timing
+            #for x in range(len(parts)):
+            #    parts[x] = removing_unwanted_words(parts[x], parsed_faction_names)
+                
+            Timing = parts[0]
+            
+            
+            # Name
+            Name = parts[1]
+            
+            
+
+
+            
+            if is_integer(Name):
+                # Description
+                print(parts)
+                
+                Description = removing_unwanted_words(' '.join(parts[3:]) if len(parts) > 2 else "" , parsed_faction_names)
+                
+                Keywords = parts[-1]
+                
+                for idx, part in enumerate(parts):
+                    sub_soup = BeautifulSoup(part, "html.parser")
+                    italics = [tag.get_text() for tag in sub_soup.find_all(["i", "em"])]
+                
+                    if italics:
+                        print(f"Part {idx} has italics: {italics}")
+                    else:
+                        print(f"Part {idx} has no italics")
+                
+                Description = ' '.join([Name, Description])
+                
+                Unit_Abilities_df.loc[len(Unit_Abilities_df)] = [Warscroll_Name, Timing, parts[2], Description, Keywords]
+            elif "Reaction" in Timing:
+                Timing = ' '.join([parts[0], parts[1]])
+                Description = removing_unwanted_words(' '.join(parts[4:]) if len(parts) > 2 else "" , parsed_faction_names)
+                Unit_Abilities_df.loc[len(Unit_Abilities_df)] = [Warscroll_Name, Timing, parts[3], Description, ""]
+                
+            
+            
+            else:
+                
+                # Add to DataFrame
+                # Description
+                Description = removing_unwanted_words(' '.join(parts[2:]) if len(parts) > 2 else "" , parsed_faction_names)
+                Unit_Abilities_df.loc[len(Unit_Abilities_df)] = [Warscroll_Name, Timing, Name, Description, ""]
+
+
+
+
+
+
+        # Save DataFrame to CSV
+        Unit_Abilities_df.to_csv(f"E:\Licened\Card Tokens\CSVs\{'_'.join(parsed_faction_names)}.csv", index=False)
+        
+        
+        #Unit_Abilities_df_Filtered = Unit_Abilities_df[~Unit_Abilities_df["Timing"].str.contains("Passive", case=False, na=False)]
+        #Unit_Abilities_df_Filtered.to_csv(f"E:\Licened\Card Tokens\CSVs\{'_'.join(parsed_faction_names)}_Filtered_Passive.csv", index=False)
+    
+        # Save DataFrame to CSV
+        
+    return Unit_Abilities_df
+   
+
+# Example call
+
+Unit_Abilities_df = get_abilities_from_each_warscroll(faction_links[1], faction_names[1], parsed_faction_names[1])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def get_warscrolls_for_an_army(faction_links: str, faction_names: str):
+    """
+    Fetch unique warscroll links for a given faction from Wahapedia.
+
+    Parameters:
+        faction_link (str): The relative link to the faction page (e.g. '/aos3/factions/cities-of-sigmar/')
+        faction_names (str): A string to identify the faction in links (e.g. 'cities-of-sigmar/')
+
+    Returns:
+        list[str]: Unique warscroll URLs for the faction
+    """
+    url = "https://wahapedia.ru" + faction_links
+    response = requests.get(url)
+    response.raise_for_status()  # raise error if request fails
+
+    soup = BeautifulSoup(response.content, "html.parser")
+    # Collect all links on the page
+    warscrolls = [a['href'] for a in soup.find_all('a', href=True)]
+
+    # Keep only links containing the faction slug
+    warscrolls = [link for link in warscrolls if faction_names in link]
+
+    # Deduplicate while preserving order
+    unique_warscrolls = list(dict.fromkeys(warscrolls[1:]))
+
+
+    #Removing regiments of renown
+
+    lines = str(soup).splitlines()
+    Present = []
+    # Print any line that contains "Regiment"
+    
+    
+    
+    
+    
+    
+        
+        
+        #for line in lines:
+        #    if word in line:
+        #        Present.append(line)
+                
+                
+
+                
+                
+        #Regiment_of_Renown = (Present[0].split("Regiment")[1].strip())
+        
+        #to_remove = []
+
+        #for x in range(len(unique_warscrolls)):
+        #    Name = unique_warscrolls[x].split("/")[-1]
+            # Check if the name is in the Regiment of Renown text
+            #print("Regiment_of_Renown:", Regiment_of_Renown)
+        #    if str(Name) in str(Regiment_of_Renown):
+        #        to_remove.append(unique_warscrolls[x])
+        #        print("to_remove:", to_remove)
+                
+                
+                
+        # Now remove them safely
+        #for item in to_remove:
+        #   unique_warscrolls.remove(item)
+        
+        #target = "/aos4/factions/"   + faction_names
+        #print("Target to remove:", target)
+        #unique_warscrolls = [w for w in unique_warscrolls if w != target]
+        #print("Unique warscrolls before Legends removal:", unique_warscrolls)
+        
+        
+        
+        
+        
+        
+        
+        
+
+        
+        
+    Name = []
+    for x in unique_warscrolls:
+        Name.append(x.split("/")[-1])   
+        
+        
+
+            
+            
+            
+        
+        
+        
+        # THis removes the "Legends" section from the warscrolls
+        # It finds the line containing "Legends" and extracts the text after it.
+        # Then it checks each warscroll name against this text to find the ones that are present
+        # in the "Legends" section.
+        # Finally, it prints the ordered names of the warscrolls that are present in the
+        
+    to_remove = []
+    for word in "Regiment", "Legends":   
+        
+        lines = str(soup).splitlines()
+        Present = []
+        for line in lines:
+            if str(word) in line:
+                Present.append(line)
+                
+        Legends_Line = (Present[0])
+        print("legens line", Legends_Line)
+        
+        
+        Sentence_Containing_Legends = Legends_Line.split(str(word))[1:] #Splits the line at "Legends" and takes the part after it however there is only a legend on every second so drop the odd ones
+        #Sentence_Containing_Legends = Sentence_Containing_Legends[1::2] #Keeps every second element starting from index 1 (the second element)
+        
+        
+        
+        
+        for x in range(len(Sentence_Containing_Legends)):
+            #print(Sentence_Containing_Legends[x], "Sentence Containing Legends")
+            
+            matches = []
+            for n in Name:
+                m = re.search(re.escape(n), Sentence_Containing_Legends[x])
+                
+                if m:
+                    matches.append((m.start(), n))  # store position + name
+                    
+                    
+            
+
+            # Sort by position of first appearance
+
+            matches.sort(key=lambda x: x[0])
+            
+            
+            
+            # Extract the ordered names
+            ordered_matches = [n for _, n in matches]
+            
+            #print("Ordered matches:", ordered_matches)
+            if word == "Regiment":
+                if ordered_matches:
+                    for z in ordered_matches:
+                        
+                        to_remove.append(f"/aos4/factions/{faction_names}/{z}")
+                        
+            elif word == "Legends":
+                if ordered_matches:
+                    to_remove.append(f"/aos4/factions/{faction_names}/{ordered_matches[1]}")
+                
+        
+        print("To remove:", to_remove)
+        unique_warscrolls = [w for w in unique_warscrolls if w not in to_remove]
+        
+        
+        
+        
+        unique_warscrolls = [w for w in unique_warscrolls if not w.endswith("warscrolls.html")]
+
+    return unique_warscrolls
+
+
+
+unique_warscrolls = get_warscrolls_for_an_army(faction_links[1], faction_names[1])
+print(unique_warscrolls)
+print(len(unique_warscrolls))
+
+
+
+
+
+
+
+
+import requests
+from bs4 import BeautifulSoup
+
+url = "https://wahapedia.ru" + unique_warscrolls[0]
+response = requests.get(url)
+soup = BeautifulSoup(response.content, "html.parser")
+
+ws_body = soup.find("div", class_="wsBody")
+
+if ws_body:
+    results = []
+
+    # Look at all child <div> inside wsBody
+    for div in ws_body.find_all("div"):
+        if div.find("b"):  # only keep divs that contain <b>
+            # Split into lines
+            lines = div.get_text(separator="\n", strip=True).split("\n")
+            print(lines)
+            cleaned = []
+            skip_next = False
+            for line in lines:
+                if skip_next:
+                    skip_next = False
+                    continue
+                if ":" in line:  # remove line with colon + following line
+                    skip_next = True
+                    continue
+                cleaned.append(line)
+                
+
+            if cleaned:
+                results.append("\n".join(cleaned))
+
+    # Deduplicate
+    results = list(set(results))
+
+    # Acceptable starts
+    Acceptable_Starts = ["Your", "Passive", "Deployment", "Reaction:", "Once", "Start", "Any"]
+
+    # Filter + print
+    for r in results:
+        first_line = r.split("\n", 1)[0]  # look at the first line only
+        if any(first_line.startswith(start) for start in Acceptable_Starts):
+            print(r)
